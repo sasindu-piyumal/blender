@@ -1655,6 +1655,19 @@ int pyrna_pydict_to_props(PointerRNA *ptr,
 static int pyrna_py_to_prop(
     PointerRNA *ptr, PropertyRNA *prop, void *data, PyObject *value, const char *error_prefix)
 {
+  /* Fast-path: check for arrays first before extracting type (avoids redundant lookups). */
+  if (LIKELY(RNA_property_array_check(prop))) {
+    /* Done getting the length. */
+    if (const DeprecatedRNA *deprecated = RNA_property_deprecated(prop)) {
+      pyrna_prop_warn_deprecated(ptr, prop, deprecated);
+    }
+    if (pyrna_py_to_array(ptr, prop, static_cast<char *>(data), value, error_prefix) == -1) {
+      return -1;
+    }
+    return 0;
+  }
+
+  /* Normal Property (not an array). */
   /* XXX hard limits should be checked here. */
   const int type = RNA_property_type(prop);
 
@@ -1662,17 +1675,8 @@ static int pyrna_py_to_prop(
     pyrna_prop_warn_deprecated(ptr, prop, deprecated);
   }
 
-  if (RNA_property_array_check(prop)) {
-    /* Done getting the length. */
-    if (pyrna_py_to_array(ptr, prop, static_cast<char *>(data), value, error_prefix) == -1) {
-      return -1;
-    }
-  }
-  else {
-    /* Normal Property (not an array). */
-
-    /* See if we can coerce into a Python type - 'PropertyType'. */
-    switch (type) {
+  /* See if we can coerce into a Python type - 'PropertyType'. */
+  switch (type) {
       case PROP_BOOLEAN: {
         int param;
         /* Prefer not to have an exception here
