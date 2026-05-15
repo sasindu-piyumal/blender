@@ -1500,17 +1500,35 @@ static PyObject *pyrna_enum_to_py(PointerRNA *ptr, PropertyRNA *prop, int val)
 PyObject *pyrna_prop_to_py(PointerRNA *ptr, PropertyRNA *prop)
 {
   PyObject *ret;
-  const int type = RNA_property_type(prop);
-
-  if (const DeprecatedRNA *deprecated = RNA_property_deprecated(prop)) {
-    pyrna_prop_warn_deprecated(ptr, prop, deprecated);
-  }
-
-  if (RNA_property_array_check(prop)) {
+  
+  /* Fast-path for array properties before type extraction (common pattern). */
+  if (LIKELY(RNA_property_array_check(prop))) {
+    if (const DeprecatedRNA *deprecated = RNA_property_deprecated(prop)) {
+      pyrna_prop_warn_deprecated(ptr, prop, deprecated);
+    }
     return pyrna_py_from_array(ptr, prop);
   }
 
-  /* See if we can coerce into a Python type - 'PropertyType'. */
+  const int type = RNA_property_type(prop);
+  
+  /* Check deprecation once for all non-array cases. */
+  if (UNLIKELY(const DeprecatedRNA *deprecated = RNA_property_deprecated(prop))) {
+    pyrna_prop_warn_deprecated(ptr, prop, deprecated);
+  }
+
+  /* Fast-path for PROP_POINTER (very common in tests). */
+  if (LIKELY(type == PROP_POINTER)) {
+    PointerRNA newptr = RNA_property_pointer_get(ptr, prop);
+    if (LIKELY(newptr.data)) {
+      return pyrna_struct_CreatePyObject(&newptr);
+    }
+    else {
+      Py_INCREF(Py_None);
+      return Py_None;
+    }
+  }
+
+  /* Fallback for all other types. */
   switch (type) {
     case PROP_BOOLEAN:
       ret = PyBool_FromLong(RNA_property_boolean_get(ptr, prop));
@@ -1556,18 +1574,20 @@ PyObject *pyrna_prop_to_py(PointerRNA *ptr, PropertyRNA *prop)
       ret = pyrna_enum_to_py(ptr, prop, RNA_property_enum_get(ptr, prop));
       break;
     }
-    case PROP_POINTER: {
-      PointerRNA newptr;
-      newptr = RNA_property_pointer_get(ptr, prop);
-      if (newptr.data) {
-        ret = pyrna_struct_CreatePyObject(&newptr);
-      }
-      else {
-        ret = Py_None;
-        Py_INCREF(ret);
+    case PROP_POINTER:
+      /* Already handled in fast-path above, shouldn't reach here. */
+      {
+        PointerRNA newptr;
+        newptr = RNA_property_pointer_get(ptr, prop);
+        if (newptr.data) {
+          ret = pyrna_struct_CreatePyObject(&newptr);
+        }
+        else {
+          ret = Py_None;
+          Py_INCREF(ret);
+        }
       }
       break;
-    }
     case PROP_COLLECTION:
       ret = pyrna_prop_CreatePyObject(ptr, prop);
       break;
