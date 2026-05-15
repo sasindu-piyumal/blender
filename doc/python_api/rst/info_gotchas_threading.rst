@@ -37,9 +37,9 @@ Here is an example of threading supported by Blender:
    import requests
 
    urls = [
-      "http://localhost:8000/file-1.blend",
-      "http://localhost:8000/file-2.blend",
-      "http://localhost:8000/file-3.blend",
+      "https://localhost:8000/file-1.blend",
+      "https://localhost:8000/file-2.blend",
+      "https://localhost:8000/file-3.blend",
    ]
 
 
