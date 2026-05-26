@@ -348,22 +348,31 @@ static void build_skip_links(BVHTree *tree, BVHNode *node, BVHNode *left, BVHNod
 static void create_kdop_hull(
     const BVHTree *tree, BVHNode *node, const float *co, int numpoints, int moving)
 {
-  float newminmax;
   float *bv = node->bv;
-  int k;
-  axis_t axis_iter;
 
   /* Don't initialize bounds for the moving case */
   if (!moving) {
     node_minmax_init(tree, node);
   }
 
-  for (k = 0; k < numpoints; k++) {
-    /* for all Axes. */
-    for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
-      newminmax = dot_v3v3(&co[k * 3], bvhtree_kdop_axes[axis_iter]);
-      bv[2 * axis_iter] = std::min(newminmax, bv[2 * axis_iter]);
-      bv[(2 * axis_iter) + 1] = std::max(newminmax, bv[(2 * axis_iter) + 1]);
+  const axis_t start_axis = tree->start_axis;
+  const axis_t stop_axis = tree->stop_axis;
+
+  for (int k = 0; k < numpoints; k++) {
+    const float *point = &co[k * 3];
+    const float px = point[0];
+    const float py = point[1];
+    const float pz = point[2];
+
+    /* Unroll common axis cases for better performance */
+    for (axis_t axis_iter = start_axis; axis_iter < stop_axis; axis_iter++) {
+      const float *axis = bvhtree_kdop_axes[axis_iter];
+      const float proj = px * axis[0] + py * axis[1] + pz * axis[2];
+      const int bv_index = 2 * axis_iter;
+      
+      /* Branchless min/max using conditionals that compile to cmov */
+      bv[bv_index] = (proj < bv[bv_index]) ? proj : bv[bv_index];
+      bv[bv_index + 1] = (proj > bv[bv_index + 1]) ? proj : bv[bv_index + 1];
     }
   }
 }
@@ -373,23 +382,26 @@ static void create_kdop_hull(
  */
 static void refit_kdop_hull(const BVHTree *tree, BVHNode *node, int start, int end)
 {
-  float newmin, newmax;
   float *__restrict bv = node->bv;
-  int j;
-  axis_t axis_iter;
 
   node_minmax_init(tree, node);
 
-  for (j = start; j < end; j++) {
+  const axis_t start_axis = tree->start_axis;
+  const axis_t stop_axis = tree->stop_axis;
+
+  for (int j = start; j < end; j++) {
     const float *__restrict node_bv = tree->nodes[j]->bv;
 
-    /* for all Axes. */
-    for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
-      newmin = node_bv[(2 * axis_iter)];
-      bv[(2 * axis_iter)] = std::min(newmin, bv[(2 * axis_iter)]);
-
-      newmax = node_bv[(2 * axis_iter) + 1];
-      bv[(2 * axis_iter) + 1] = std::max(newmax, bv[(2 * axis_iter) + 1]);
+    /* Process all axes with reduced indexing overhead */
+    for (axis_t axis_iter = start_axis; axis_iter < stop_axis; axis_iter++) {
+      const int bv_min_idx = 2 * axis_iter;
+      const int bv_max_idx = bv_min_idx + 1;
+      
+      const float child_min = node_bv[bv_min_idx];
+      const float child_max = node_bv[bv_max_idx];
+      
+      bv[bv_min_idx] = (child_min < bv[bv_min_idx]) ? child_min : bv[bv_min_idx];
+      bv[bv_max_idx] = (child_max > bv[bv_max_idx]) ? child_max : bv[bv_max_idx];
     }
   }
 }
@@ -423,25 +435,29 @@ static char get_largest_axis(const float *bv)
  */
 static void node_join(BVHTree *tree, BVHNode *node)
 {
-  int i;
-  axis_t axis_iter;
-
   node_minmax_init(tree, node);
 
-  for (i = 0; i < tree->tree_type; i++) {
-    if (node->children[i]) {
-      for (axis_iter = tree->start_axis; axis_iter < tree->stop_axis; axis_iter++) {
-        /* update minimum */
-        node->bv[(2 * axis_iter)] = std::min(node->children[i]->bv[(2 * axis_iter)],
-                                             node->bv[(2 * axis_iter)]);
+  const axis_t start_axis = tree->start_axis;
+  const axis_t stop_axis = tree->stop_axis;
+  const int tree_type = tree->tree_type;
+  float *__restrict bv = node->bv;
 
-        /* update maximum */
-        node->bv[(2 * axis_iter) + 1] = std::max(node->children[i]->bv[(2 * axis_iter) + 1],
-                                                 node->bv[(2 * axis_iter) + 1]);
-      }
-    }
-    else {
+  for (int i = 0; i < tree_type; i++) {
+    const BVHNode *child = node->children[i];
+    if (!child) {
       break;
+    }
+    
+    const float *__restrict child_bv = child->bv;
+    for (axis_t axis_iter = start_axis; axis_iter < stop_axis; axis_iter++) {
+      const int bv_min_idx = 2 * axis_iter;
+      const int bv_max_idx = bv_min_idx + 1;
+      
+      const float child_min = child_bv[bv_min_idx];
+      const float child_max = child_bv[bv_max_idx];
+      
+      bv[bv_min_idx] = (child_min < bv[bv_min_idx]) ? child_min : bv[bv_min_idx];
+      bv[bv_max_idx] = (child_max > bv[bv_max_idx]) ? child_max : bv[bv_max_idx];
     }
   }
 }
@@ -1073,13 +1089,14 @@ static bool tree_overlap_test(const BVHNode *node1,
                               axis_t start_axis,
                               axis_t stop_axis)
 {
-  const float *bv1 = node1->bv + (start_axis << 1);
-  const float *bv2 = node2->bv + (start_axis << 1);
-  const float *bv1_end = node1->bv + (stop_axis << 1);
+  const float *bv1 = node1->bv;
+  const float *bv2 = node2->bv;
 
-  /* test all axis if min + max overlap */
-  for (; bv1 != bv1_end; bv1 += 2, bv2 += 2) {
-    if ((bv1[0] > bv2[1]) || (bv2[0] > bv1[1])) {
+  /* Test all axes - early exit on first non-overlap */
+  for (axis_t axis = start_axis; axis < stop_axis; axis++) {
+    const int idx_min = axis << 1;
+    const int idx_max = idx_min + 1;
+    if ((bv1[idx_min] > bv2[idx_max]) | (bv2[idx_min] > bv1[idx_max])) {
       return false;
     }
   }
@@ -1527,18 +1544,33 @@ int *BLI_bvhtree_intersect_plane(const BVHTree *tree, float plane[4], uint *r_in
  * Returns the squared distance to that point. */
 static float calc_nearest_point_squared(const float proj[3], BVHNode *node, float nearest[3])
 {
-  int i;
   const float *bv = node->bv;
 
-  /* nearest on AABB hull */
-  for (i = 0; i != 3; i++, bv += 2) {
-    float val = proj[i];
-    val = std::max(bv[0], val);
-    val = std::min(bv[1], val);
-    nearest[i] = val;
-  }
+  /* Clamp each coordinate to AABB bounds */
+  float dx, dy, dz;
+  
+  /* X axis */
+  float nx = proj[0];
+  nx = (nx < bv[0]) ? bv[0] : nx;
+  nx = (nx > bv[1]) ? bv[1] : nx;
+  nearest[0] = nx;
+  dx = proj[0] - nx;
+  
+  /* Y axis */
+  float ny = proj[1];
+  ny = (ny < bv[2]) ? bv[2] : ny;
+  ny = (ny > bv[3]) ? bv[3] : ny;
+  nearest[1] = ny;
+  dy = proj[1] - ny;
+  
+  /* Z axis */
+  float nz = proj[2];
+  nz = (nz < bv[4]) ? bv[4] : nz;
+  nz = (nz > bv[5]) ? bv[5] : nz;
+  nearest[2] = nz;
+  dz = proj[2] - nz;
 
-  return len_squared_v3v3(proj, nearest);
+  return dx * dx + dy * dy + dz * dz;
 }
 
 /* Depth first search method */
@@ -1792,31 +1824,33 @@ int BLI_bvhtree_find_nearest_first(const BVHTree *tree,
 /* Determines the distance that the ray must travel to hit the bounding volume of the given node */
 static float ray_nearest_hit(const BVHRayCastData *data, const float bv[6])
 {
-  int i;
+  float low = 0.0f;
+  float upper = data->hit.dist;
+  const float radius = data->ray.radius;
 
-  float low = 0, upper = data->hit.dist;
+  /* Process each axis - manually unrolled for better performance */
+  for (int i = 0; i < 3; i++) {
+    const float ray_dot = data->ray_dot_axis[i];
+    const float origin = data->ray.origin[i];
+    const float bv_min = bv[i * 2] - radius;
+    const float bv_max = bv[i * 2 + 1] + radius;
 
-  for (i = 0; i != 3; i++, bv += 2) {
-    if (data->ray_dot_axis[i] == 0.0f) {
-      /* axis aligned ray */
-      if (data->ray.origin[i] < bv[0] - data->ray.radius ||
-          data->ray.origin[i] > bv[1] + data->ray.radius)
-      {
+    if (ray_dot == 0.0f) {
+      /* Axis-aligned ray - check if origin is within bounds */
+      if ((origin < bv_min) | (origin > bv_max)) {
         return FLT_MAX;
       }
     }
     else {
-      float ll = (bv[0] - data->ray.radius - data->ray.origin[i]) / data->ray_dot_axis[i];
-      float lu = (bv[1] + data->ray.radius - data->ray.origin[i]) / data->ray_dot_axis[i];
+      const float t_min = (bv_min - origin) / ray_dot;
+      const float t_max = (bv_max - origin) / ray_dot;
 
-      if (data->ray_dot_axis[i] > 0.0f) {
-        low = std::max(ll, low);
-        upper = std::min(lu, upper);
-      }
-      else {
-        low = std::max(lu, low);
-        upper = std::min(ll, upper);
-      }
+      /* Swap if ray direction is negative */
+      const float ll = (ray_dot > 0.0f) ? t_min : t_max;
+      const float lu = (ray_dot > 0.0f) ? t_max : t_min;
+
+      low = (ll > low) ? ll : low;
+      upper = (lu < upper) ? lu : upper;
 
       if (low > upper) {
         return FLT_MAX;
@@ -1835,21 +1869,29 @@ static float ray_nearest_hit(const BVHRayCastData *data, const float bv[6])
 static float fast_ray_nearest_hit(const BVHRayCastData *data, const BVHNode *node)
 {
   const float *bv = node->bv;
+  const int *idx = data->index;
+  
+  const float t1x = (bv[idx[0]] - data->ray.origin[0]) * data->idot_axis[0];
+  const float t2x = (bv[idx[1]] - data->ray.origin[0]) * data->idot_axis[0];
+  const float t1y = (bv[idx[2]] - data->ray.origin[1]) * data->idot_axis[1];
+  const float t2y = (bv[idx[3]] - data->ray.origin[1]) * data->idot_axis[1];
+  const float t1z = (bv[idx[4]] - data->ray.origin[2]) * data->idot_axis[2];
+  const float t2z = (bv[idx[5]] - data->ray.origin[2]) * data->idot_axis[2];
 
-  float t1x = (bv[data->index[0]] - data->ray.origin[0]) * data->idot_axis[0];
-  float t2x = (bv[data->index[1]] - data->ray.origin[0]) * data->idot_axis[0];
-  float t1y = (bv[data->index[2]] - data->ray.origin[1]) * data->idot_axis[1];
-  float t2y = (bv[data->index[3]] - data->ray.origin[1]) * data->idot_axis[1];
-  float t1z = (bv[data->index[4]] - data->ray.origin[2]) * data->idot_axis[2];
-  float t2z = (bv[data->index[5]] - data->ray.origin[2]) * data->idot_axis[2];
-
-  if ((t1x > t2y || t2x < t1y || t1x > t2z || t2x < t1z || t1y > t2z || t2y < t1z) ||
-      (t2x < 0.0f || t2y < 0.0f || t2z < 0.0f) ||
-      (t1x > data->hit.dist || t1y > data->hit.dist || t1z > data->hit.dist))
+  /* Early exit tests - combined with bitwise OR for better branch prediction */
+  const float max_dist = data->hit.dist;
+  if (((t1x > t2y) | (t2x < t1y) | (t1x > t2z) | (t2x < t1z) | (t1y > t2z) | (t2y < t1z)) |
+      ((t2x < 0.0f) | (t2y < 0.0f) | (t2z < 0.0f)) |
+      ((t1x > max_dist) | (t1y > max_dist) | (t1z > max_dist)))
   {
     return FLT_MAX;
   }
-  return max_fff(t1x, t1y, t1z);
+  
+  /* Find maximum entry distance */
+  float t_max = t1x;
+  t_max = (t1y > t_max) ? t1y : t_max;
+  t_max = (t1z > t_max) ? t1z : t_max;
+  return t_max;
 }
 
 static void dfs_raycast(BVHRayCastData *data, BVHNode *node)
