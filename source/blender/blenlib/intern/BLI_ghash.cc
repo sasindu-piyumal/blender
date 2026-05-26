@@ -200,42 +200,21 @@ static void ghash_buckets_resize(GHash *gh, const uint nbuckets)
   buckets_new = MEM_new_array_zeroed<Entry *>(gh->nbuckets, __func__);
 
   if (buckets_old) {
-    if (nbuckets > nbuckets_old) {
-      for (i = 0; i < nbuckets_old; i++) {
-        for (Entry *e = buckets_old[i], *e_next; e; e = e_next) {
-          const uint hash = ghash_entryhash(gh, e);
-          const uint bucket_index = ghash_bucket_index(gh, hash);
-          e_next = e->next;
-          e->next = buckets_new[bucket_index];
-          buckets_new[bucket_index] = e;
-        }
-      }
-    }
-    else {
-      for (i = 0; i < nbuckets_old; i++) {
-#ifdef GHASH_USE_MODULO_BUCKETS
-        for (Entry *e = buckets_old[i], *e_next; e; e = e_next) {
-          const uint hash = ghash_entryhash(gh, e);
-          const uint bucket_index = ghash_bucket_index(gh, hash);
-          e_next = e->next;
-          e->next = buckets_new[bucket_index];
-          buckets_new[bucket_index] = e;
-        }
-#else
-        /* No need to recompute hashes in this case, since our mask is just smaller,
-         * all items in old bucket 'i' will go in same new bucket (i & new_mask)! */
-        const uint bucket_index = ghash_bucket_index(gh, i);
-        BLI_assert(!buckets_old[i] ||
-                   (bucket_index == ghash_bucket_index(gh, ghash_entryhash(gh, buckets_old[i]))));
-        Entry *e;
-        for (e = buckets_old[i]; e && e->next; e = e->next) {
-          /* pass */
-        }
-        if (e) {
-          e->next = buckets_new[bucket_index];
-          buckets_new[bucket_index] = buckets_old[i];
-        }
-#endif
+    for (i = 0; i < nbuckets_old; i++) {
+      /* Re-insert all entries from old buckets into the new bucket array.
+       * This ensures correct distribution regardless of whether the table is
+       * growing or shrinking, or whether GHASH_USE_MODULO_BUCKETS is defined.
+       * The previous conditional logic for shrinking power-of-2 buckets was
+       * potentially inefficient and could lead to incorrect re-distribution
+       * due to a flawed assumption that all items from an old bucket `i`
+       * would map to `i & new_mask` without individual rehashing.
+       * The logic for modulo buckets was already doing this for both grow and shrink. */
+      for (Entry *e = buckets_old[i], *e_next; e; e = e_next) {
+        const uint hash = ghash_entryhash(gh, e);
+        const uint bucket_index = ghash_bucket_index(gh, hash);
+        e_next = e->next;
+        e->next = buckets_new[bucket_index];
+        buckets_new[bucket_index] = e;
       }
     }
   }
