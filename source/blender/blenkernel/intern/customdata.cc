@@ -2246,6 +2246,44 @@ static bool customdata_merge_internal(const CustomData *source,
 {
   bool changed = false;
 
+  /* Pre-count layers that will be merged to reserve capacity and avoid repeated allocations. */
+  int layers_to_merge_count = 0;
+  {
+    int last_type = -1;
+    int current_type_layer_count = 0;
+    int max_current_type_layer_count = -1;
+
+    for (int i = 0; i < source->totlayer; i++) {
+      const CustomDataLayer &src_layer = source->layers[i];
+      const eCustomDataType type = eCustomDataType(src_layer.type);
+      const int src_layer_flag = src_layer.flag;
+
+      if (type != last_type) {
+        const int layernum_dst = CustomData_number_of_layers(dest, type);
+        current_type_layer_count = layernum_dst;
+        max_current_type_layer_count = CustomData_layertype_layers_max(type);
+        last_type = type;
+      }
+      else {
+        current_type_layer_count++;
+      }
+
+      if ((src_layer_flag & CD_FLAG_NOCOPY) || !(mask & CD_TYPE_AS_MASK(type)) ||
+          ((max_current_type_layer_count != -1) &&
+           (current_type_layer_count >= max_current_type_layer_count)) ||
+          (CustomData_get_named_layer_index(dest, type, src_layer.name) != -1))
+      {
+        continue;
+      }
+      layers_to_merge_count++;
+    }
+  }
+
+  /* Pre-allocate to avoid repeated reallocations. */
+  if (layers_to_merge_count > 0) {
+    customData_reserve_layers(dest, layers_to_merge_count);
+  }
+
   int last_type = -1;
   int last_active = 0;
   int last_render = 0;
@@ -2431,6 +2469,9 @@ void CustomData_realloc(CustomData *data,
                         const eCDAllocType alloctype)
 {
   BLI_assert(new_size >= 0);
+  const bool is_growing = new_size > old_size;
+  const int new_elements_num = is_growing ? (new_size - old_size) : 0;
+
   for (int i = 0; i < data->totlayer; i++) {
     CustomDataLayer *layer = &data->layers[i];
     const LayerTypeInfo *typeInfo = layerType_getInfo(eCustomDataType(layer->type));
@@ -2462,9 +2503,9 @@ void CustomData_realloc(CustomData *data,
           eCustomDataType(layer->type), layer->data, new_size);
     }
 
-    if (new_size > old_size) {
-      const int new_elements_num = new_size - old_size;
-      void *new_elements_begin = POINTER_OFFSET(layer->data, old_size_in_bytes);
+    if (is_growing) {
+      const int64_t old_size_in_bytes_element = int64_t(old_size) * typeInfo->size;
+      void *new_elements_begin = POINTER_OFFSET(layer->data, old_size_in_bytes_element);
       switch (alloctype) {
         case CD_CONSTRUCT: {
           /* Initialize new values for non-trivial types. */
@@ -2766,6 +2807,19 @@ static void customData_resize(CustomData *data, const int grow_amount)
   data->layers = static_cast<CustomDataLayer *>(MEM_realloc_uninitialized(
       data->layers, (data->maxlayer + grow_amount) * sizeof(CustomDataLayer)));
   data->maxlayer += grow_amount;
+}
+
+/* Pre-allocate layers with capacity based on expected count to reduce reallocation overhead. */
+static void customData_reserve_layers(CustomData *data, const int expected_additional_layers)
+{
+  if (data->totlayer + expected_additional_layers <= data->maxlayer) {
+    return;
+  }
+  
+  const int needed_capacity = data->totlayer + expected_additional_layers;
+  const int grow_amount = std::max(CUSTOMDATA_GROW, 
+                                   needed_capacity - data->maxlayer);
+  customData_resize(data, grow_amount);
 }
 
 static CustomDataLayer *customData_add_layer__internal(
@@ -3240,10 +3294,12 @@ void CustomData_interp(const CustomData *source,
 
   const void *source_buf[SOURCE_BUF_SIZE];
   const void **sources = source_buf;
+  const void **sources_heap = nullptr;
 
   /* Slow fallback in case we're interpolating a ridiculous number of elements. */
   if (count > SOURCE_BUF_SIZE) {
-    sources = MEM_new_array_uninitialized<const void *>(size_t(count), __func__);
+    sources_heap = MEM_new_array_uninitialized<const void *>(size_t(count), __func__);
+    sources = sources_heap;
   }
 
   /* If no weights are given, generate default ones to produce an average result. */
@@ -3299,8 +3355,8 @@ void CustomData_interp(const CustomData *source,
     }
   }
 
-  if (count > SOURCE_BUF_SIZE) {
-    MEM_delete(sources);
+  if (sources_heap) {
+    MEM_delete(sources_heap);
   }
   if (!ELEM(default_weights, nullptr, default_weights_buf)) {
     MEM_delete(default_weights);
@@ -4000,10 +4056,12 @@ void CustomData_bmesh_interp(
 
   void *source_buf[SOURCE_BUF_SIZE];
   const void **sources = const_cast<const void **>(source_buf);
+  const void **sources_heap = nullptr;
 
   /* Slow fallback in case we're interpolating a ridiculous number of elements. */
   if (count > SOURCE_BUF_SIZE) {
-    sources = MEM_new_array_uninitialized<const void *>(size_t(count), __func__);
+    sources_heap = MEM_new_array_uninitialized<const void *>(size_t(count), __func__);
+    sources = sources_heap;
   }
 
   /* If no weights are given, generate default ones to produce an average result. */
@@ -4030,8 +4088,8 @@ void CustomData_bmesh_interp(
     }
   }
 
-  if (count > SOURCE_BUF_SIZE) {
-    MEM_delete(sources);
+  if (sources_heap) {
+    MEM_delete(sources_heap);
   }
   if (!ELEM(default_weights, nullptr, default_weights_buf)) {
     MEM_delete(default_weights);

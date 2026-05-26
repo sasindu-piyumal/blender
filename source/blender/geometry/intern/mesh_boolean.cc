@@ -1099,34 +1099,67 @@ static Mesh *mesh_boolean_float(Span<const Mesh *> meshes,
     return BKE_mesh_copy_for_eval(*meshes[0]);
   }
 
+  /* Iteratively operate with each operand. */
+  // `looptris` is declared outside the loop to potentially reduce repeated allocations
+  // if `Array`'s internal memory management is not optimized for resizing from zero
+  // in every iteration. `reinitialize` and `clear` will still be called as needed.
   Array<std::array<BMLoop *, 3>> looptris;
+
+  // Handle the first boolean operation: meshes[0] op meshes[1].
+  Array<const Mesh *> two_meshes_operands = {meshes[0], meshes[1]};
+  Array<float4x4> two_meshes_transforms = {transforms[0], transforms[1]};
+  Array<Array<short>> two_meshes_remaps = {material_remaps[0], material_remaps[1]};
+
+  BMesh *current_result_bm = mesh_bm_concat(
+      two_meshes_operands, two_meshes_transforms, two_meshes_remaps, looptris);
+  BM_mesh_intersect(current_result_bm,
+                    looptris,
+                    face_boolean_operand,
+                    nullptr,
+                    false,
+                    false,
+                    true,
+                    true,
+                    false,
+                    false,
+                    boolean_mode,
+                    1e-6f);
+
   if (meshes.size() == 2) {
-    BMesh *bm = mesh_bm_concat(meshes, transforms, material_remaps, looptris);
-    BM_mesh_intersect(bm,
-                      looptris,
-                      face_boolean_operand,
-                      nullptr,
-                      false,
-                      false,
-                      true,
-                      true,
-                      false,
-                      false,
-                      boolean_mode,
-                      1e-6f);
-    Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(bm, nullptr, meshes[0]);
-    BM_mesh_free(bm);
+    Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(current_result_bm, nullptr, meshes[0]);
+    BM_mesh_free(current_result_bm);
     return result;
   }
 
-  /* Iteratively operate with each operand. */
-  Array<const Mesh *> two_meshes = {meshes[0], meshes[1]};
-  Array<float4x4> two_transforms = {transforms[0], transforms[1]};
-  Array<Array<short>> two_remaps = {material_remaps[0], material_remaps[1]};
-  Mesh *prev_result_mesh = nullptr;
-  for (const int i : meshes.index_range().drop_back(1)) {
-    BMesh *bm = mesh_bm_concat(two_meshes, two_transforms, two_remaps, looptris);
-    BM_mesh_intersect(bm,
+  // Continue with subsequent operations for meshes.size() > 2.
+  // The `current_result_bm` now holds the result of the first boolean operation.
+  Mesh *prev_intermediate_mesh_converted = nullptr; /* This will hold the `Mesh` conversion of
+                                                      * `current_result_bm` from the previous iteration,
+                                                      * which will be freed. */
+
+  for (const int i : IndexRange(2, meshes.size())) {
+    // Convert the current BMesh result to a Mesh. This is the intermediate 'round-trip'
+    // that the context description identifies as inefficient. However, given the
+    // `BM_mesh_intersect` API's binary nature and `mesh_bm_concat`'s `Mesh *` input,
+    // this conversion is currently unavoidable without major BMesh API re-architecture.
+    Mesh *operand1_mesh_current_result = BKE_mesh_from_bmesh_for_eval_nomain(
+        current_result_bm, nullptr, meshes[0]);
+    BM_mesh_free(current_result_bm); /* Free the BMesh from the previous iteration,
+                                       * as it's no longer needed. */
+
+    // Prepare inputs for the next `mesh_bm_concat` call.
+    two_meshes_operands[0] = operand1_mesh_current_result;
+    two_meshes_operands[1] = meshes[i];
+    two_meshes_transforms[0] = float4x4::identity(); /* Intermediate result is considered
+                                                       * to be in the target space. */
+    two_meshes_transforms[1] = transforms[i];
+    two_meshes_remaps[0] = {}; /* No remapping needed for the intermediate result,
+                                * as materials are already aligned. */
+    two_meshes_remaps[1] = material_remaps[i];
+
+    current_result_bm = mesh_bm_concat(
+        two_meshes_operands, two_meshes_transforms, two_meshes_remaps, looptris);
+    BM_mesh_intersect(current_result_bm,
                       looptris,
                       face_boolean_operand,
                       nullptr,
@@ -1138,29 +1171,21 @@ static Mesh *mesh_boolean_float(Span<const Mesh *> meshes,
                       false,
                       boolean_mode,
                       1e-6f);
-    Mesh *result_i_mesh = BKE_mesh_from_bmesh_for_eval_nomain(bm, nullptr, meshes[0]);
-    BM_mesh_free(bm);
-    if (prev_result_mesh != nullptr) {
-      /* Except in the first iteration, two_meshes[0] holds the intermediate
-       * mesh result from the previous iteration. */
-      BKE_id_free(nullptr, prev_result_mesh);
+
+    // Free the Mesh converted from the previous BMesh result.
+    if (prev_intermediate_mesh_converted != nullptr) {
+      BKE_id_free(nullptr, prev_intermediate_mesh_converted);
     }
-    if (i < meshes.size() - 2) {
-      two_meshes[0] = result_i_mesh;
-      two_meshes[1] = meshes[i + 2];
-      two_transforms[0] = float4x4::identity();
-      two_transforms[1] = transforms[i + 2];
-      two_remaps[0] = {};
-      two_remaps[1] = material_remaps[i + 2];
-      prev_result_mesh = result_i_mesh;
-    }
-    else {
-      return result_i_mesh;
-    }
+    prev_intermediate_mesh_converted = operand1_mesh_current_result;
   }
 
-  BLI_assert_unreachable();
-  return nullptr;
+  // Final conversion of the last BMesh result to a Mesh and cleanup.
+  Mesh *final_result_mesh = BKE_mesh_from_bmesh_for_eval_nomain(current_result_bm, nullptr, meshes[0]);
+  BM_mesh_free(current_result_bm);
+  if (prev_intermediate_mesh_converted != nullptr) {
+    BKE_id_free(nullptr, prev_intermediate_mesh_converted);
+  }
+  return final_result_mesh;
 }
 
 #ifdef BENCHMARK_TIME

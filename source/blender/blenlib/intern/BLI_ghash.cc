@@ -158,20 +158,13 @@ BLI_INLINE uint ghash_bucket_index(const GHash *gh, const uint hash)
  */
 BLI_INLINE uint ghash_find_next_bucket_index(const GHash *gh, uint curr_bucket)
 {
-  if (curr_bucket >= gh->nbuckets) {
-    curr_bucket = 0;
-  }
-  if (gh->buckets[curr_bucket]) {
-    return curr_bucket;
-  }
-  for (; curr_bucket < gh->nbuckets; curr_bucket++) {
-    if (gh->buckets[curr_bucket]) {
-      return curr_bucket;
-    }
-  }
-  for (curr_bucket = 0; curr_bucket < gh->nbuckets; curr_bucket++) {
-    if (gh->buckets[curr_bucket]) {
-      return curr_bucket;
+  const uint nbuckets = gh->nbuckets;
+  curr_bucket = (curr_bucket >= nbuckets) ? 0 : curr_bucket;
+  
+  for (uint i = 0; i < nbuckets; i++) {
+    const uint bucket_idx = (curr_bucket + i) % nbuckets;
+    if (gh->buckets[bucket_idx]) {
+      return bucket_idx;
     }
   }
   BLI_assert_unreachable();
@@ -1140,54 +1133,45 @@ double BLI_ghash_calc_quality_ex(const GHash *gh,
     *r_biggest_bucket = 0;
   }
 
+  /* Combine variance and quality calculation in a single pass. */
+  uint64_t sum = 0;
+  uint64_t overloaded_buckets_threshold = uint64_t(max_ii(GHASH_LIMIT_GROW(1), 1));
+  uint64_t sum_overloaded = 0;
+  uint64_t sum_empty = 0;
+  double variance_sum = 0.0;
+
+  for (i = 0; i < gh->nbuckets; i++) {
+    uint64_t count = 0;
+    Entry *e;
+    for (e = gh->buckets[i]; e; e = e->next) {
+      count++;
+    }
+    if (r_biggest_bucket) {
+      *r_biggest_bucket = max_ii(*r_biggest_bucket, int(count));
+    }
+    if (r_variance) {
+      variance_sum += (double(count) - mean) * (double(count) - mean);
+    }
+    if (r_prop_overloaded_buckets && (count > overloaded_buckets_threshold)) {
+      sum_overloaded++;
+    }
+    if (r_prop_empty_buckets && !count) {
+      sum_empty++;
+    }
+    sum += count * (count + 1);
+  }
+  
   if (r_variance) {
-    /* We already know our mean (i.e. load factor), easy to compute variance.
-     * See https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Two-pass_algorithm
-     */
-    double sum = 0.0;
-    for (i = 0; i < gh->nbuckets; i++) {
-      int count = 0;
-      Entry *e;
-      for (e = gh->buckets[i]; e; e = e->next) {
-        count++;
-      }
-      sum += (double(count) - mean) * (double(count) - mean);
-    }
-    *r_variance = sum / double(gh->nbuckets - 1);
+    *r_variance = variance_sum / double(gh->nbuckets - 1);
   }
-
-  {
-    uint64_t sum = 0;
-    uint64_t overloaded_buckets_threshold = uint64_t(max_ii(GHASH_LIMIT_GROW(1), 1));
-    uint64_t sum_overloaded = 0;
-    uint64_t sum_empty = 0;
-
-    for (i = 0; i < gh->nbuckets; i++) {
-      uint64_t count = 0;
-      Entry *e;
-      for (e = gh->buckets[i]; e; e = e->next) {
-        count++;
-      }
-      if (r_biggest_bucket) {
-        *r_biggest_bucket = max_ii(*r_biggest_bucket, int(count));
-      }
-      if (r_prop_overloaded_buckets && (count > overloaded_buckets_threshold)) {
-        sum_overloaded++;
-      }
-      if (r_prop_empty_buckets && !count) {
-        sum_empty++;
-      }
-      sum += count * (count + 1);
-    }
-    if (r_prop_overloaded_buckets) {
-      *r_prop_overloaded_buckets = double(sum_overloaded) / double(gh->nbuckets);
-    }
-    if (r_prop_empty_buckets) {
-      *r_prop_empty_buckets = double(sum_empty) / double(gh->nbuckets);
-    }
-    return (double(sum) * double(gh->nbuckets) /
-            (double(gh->nentries) * (gh->nentries + 2 * gh->nbuckets - 1)));
+  if (r_prop_overloaded_buckets) {
+    *r_prop_overloaded_buckets = double(sum_overloaded) / double(gh->nbuckets);
   }
+  if (r_prop_empty_buckets) {
+    *r_prop_empty_buckets = double(sum_empty) / double(gh->nbuckets);
+  }
+  return (double(sum) * double(gh->nbuckets) /
+          (double(gh->nentries) * (gh->nentries + 2 * gh->nbuckets - 1)));
 }
 double BLI_gset_calc_quality_ex(const GSet *gs,
                                 double *r_load,
