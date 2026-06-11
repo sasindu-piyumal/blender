@@ -20,7 +20,7 @@ bpy.utils.register_class(MaterialSettings)
 bpy.types.Material.my_settings = bpy.props.PointerProperty(type=MaterialSettings)
 
 # Test the new settings work.
-material = bpy.data.materials[0]
+material = bpy.data.materials[0] if bpy.data.materials else bpy.data.materials.new(name="Material")
 
 material.my_settings.my_int = 5
 material.my_settings.my_float = 3.0
