@@ -98,8 +98,9 @@ int BLI_path_sequence_decode(const char *path,
   }
 
   if (found_digit) {
-    const long long int ret = strtoll(&(path[nums]), nullptr, 10);
-    if (ret >= INT_MIN && ret <= INT_MAX) {
+    char *endptr;
+    const long long int ret = strtoll(&(path[nums]), &endptr, 10);
+    if (endptr == path + nume + 1 && ret >= INT_MIN && ret <= INT_MAX) {
       if (tail) {
         BLI_strncpy(tail, &path[nume + 1], tail_maxncpy);
       }

@@ -1249,6 +1249,7 @@ TEST(path_utils, SequenceDecode)
 {
   /* Basic use. */
   PATH_SEQ_DECODE("file_123.txt", 123, "file_", ".txt", 3);
+  /* A numeric extension must not be included in the frame number. */
   PATH_SEQ_DECODE("file_123.321", 123, "file_", ".321", 3);
   PATH_SEQ_DECODE(".file_123.txt", 123, ".file_", ".txt", 3);
 
