@@ -100,6 +100,7 @@ bugfix = ""
 import os
 import sys
 import io
+import subprocess
 
 sys.stdin = os.fdopen(sys.stdin.fileno(), "rb")
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='surrogateescape', line_buffering=True)
