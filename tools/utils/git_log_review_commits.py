@@ -100,6 +100,7 @@ bugfix = ""
 import os
 import sys
 import io
+import subprocess
 
 sys.stdin = os.fdopen(sys.stdin.fileno(), "rb")
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='surrogateescape', line_buffering=True)
@@ -217,7 +218,7 @@ def main():
         sha1 = c.sha1
 
         # diff may scroll off the screen, that's OK
-        os.system("git --git-dir %s show %s --format=%%n" % (c._git_dir, sha1.decode('ascii')))
+        subprocess.run(["git", "--git-dir", c._git_dir, "show", sha1.decode('ascii'), "--format=\n"])
         print("")
         print_commit(c)
         sys.stdout.flush()
