@@ -217,7 +217,7 @@ def main():
         sha1 = c.sha1
 
         # diff may scroll off the screen, that's OK
-        os.system("git --git-dir %s show %s --format=%%n" % (c._git_dir, sha1.decode('ascii')))
+        subprocess.run(["git", "--git-dir", c._git_dir, "show", sha1.decode('ascii'), "--format=\n"])
         print("")
         print_commit(c)
         sys.stdout.flush()
