@@ -400,8 +400,7 @@ class RenderScheduler {
      * devices. */
     bool last_rebalance_changed = false;
 
-    /* Threshold for adaptive sampling which will be scheduled to work when not using progressive
-     * noise floor. */
+    /* Current threshold for the progressive adaptive-sampling noise floor. */
     float adaptive_sampling_threshold = 0.0f;
 
     bool last_work_tile_was_denoised = false;
