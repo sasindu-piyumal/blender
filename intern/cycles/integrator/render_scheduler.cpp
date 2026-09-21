@@ -152,9 +152,6 @@ void RenderScheduler::reset(const BufferParams &buffer_params)
   state_.last_rebalance_changed = false;
   state_.need_rebalance_at_next_work = false;
 
-  /* TODO(sergey): Choose better initial value. */
-  /* NOTE: The adaptive sampling settings might not be available here yet. */
-  state_.adaptive_sampling_threshold = 0.4f;
 
   state_.last_work_tile_was_denoised = false;
   state_.tile_result_was_written = false;
