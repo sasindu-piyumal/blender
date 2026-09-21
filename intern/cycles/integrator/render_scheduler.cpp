@@ -10,6 +10,7 @@
 #include "session/tile.h"
 
 #include "util/log.h"
+#include "util/math.h"
 #include "util/time.h"
 
 CCL_NAMESPACE_BEGIN
@@ -66,6 +67,17 @@ void RenderScheduler::set_limit_samples_per_update(const int limit_samples)
 void RenderScheduler::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
 {
   adaptive_sampling_ = adaptive_sampling;
+
+  /* Use three progressively cleaner noise-floor passes before the final user threshold. Starting
+   * at 8 times the final threshold gives the exact sequence 8x, 4x, 2x, 1x as idle rescheduling
+   * halves it. This provides a small, bounded number of increasingly refined previews while
+   * `max()` in the rescheduling step guarantees that the final threshold is reached without
+   * undershooting. Non-positive or non-finite thresholds do not enable progressive rescheduling. */
+  constexpr int progressive_noise_floor_passes = 3;
+  state_.adaptive_sampling_threshold =
+      adaptive_sampling.threshold > 0.0f && isfinite(adaptive_sampling.threshold) ?
+          adaptive_sampling.threshold * (1 << progressive_noise_floor_passes) :
+          adaptive_sampling.threshold;
 }
 
 bool RenderScheduler::is_adaptive_sampling_used() const
@@ -145,10 +157,6 @@ void RenderScheduler::reset(const BufferParams &buffer_params)
   state_.num_rebalance_changes = 0;
   state_.last_rebalance_changed = false;
   state_.need_rebalance_at_next_work = false;
-
-  /* TODO(sergey): Choose better initial value. */
-  /* NOTE: The adaptive sampling settings might not be available here yet. */
-  state_.adaptive_sampling_threshold = 0.4f;
 
   state_.last_work_tile_was_denoised = false;
   state_.tile_result_was_written = false;
