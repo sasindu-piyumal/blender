@@ -66,6 +66,12 @@ void RenderScheduler::set_limit_samples_per_update(const int limit_samples)
 void RenderScheduler::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
 {
   adaptive_sampling_ = adaptive_sampling;
+
+  /* Start the progressive noise floor at a threshold derived from the final threshold. The adaptive
+   * step is a power of two, so the idle rescheduling below lowers the threshold once per halving
+   * until it reaches the configured value. This gives a bounded number of progressively cleaner
+   * passes without relying on a scene-independent initial threshold. */
+  state_.adaptive_sampling_threshold = adaptive_sampling.threshold * adaptive_sampling.adaptive_step;
 }
 
 bool RenderScheduler::is_adaptive_sampling_used() const
