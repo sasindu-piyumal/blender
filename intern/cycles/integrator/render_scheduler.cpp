@@ -72,12 +72,12 @@ void RenderScheduler::set_adaptive_sampling(const AdaptiveSampling &adaptive_sam
    * at 8 times the final threshold gives the exact sequence 8x, 4x, 2x, 1x as idle rescheduling
    * halves it. This provides a small, bounded number of increasingly refined previews while
    * `max()` in the rescheduling step guarantees that the final threshold is reached without
-   * undershooting. Non-positive thresholds do not enable progressive rescheduling. */
+   * undershooting. Non-positive or non-finite thresholds do not enable progressive rescheduling. */
   constexpr int progressive_noise_floor_passes = 3;
-  state_.adaptive_sampling_threshold = adaptive_sampling.threshold > 0.0f ?
-                                           adaptive_sampling.threshold *
-                                               (1 << progressive_noise_floor_passes) :
-                                           adaptive_sampling.threshold;
+  state_.adaptive_sampling_threshold =
+      adaptive_sampling.threshold > 0.0f && isfinite(adaptive_sampling.threshold) ?
+          adaptive_sampling.threshold * (1 << progressive_noise_floor_passes) :
+          adaptive_sampling.threshold;
 }
 
 bool RenderScheduler::is_adaptive_sampling_used() const
