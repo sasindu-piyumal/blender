@@ -152,7 +152,6 @@ void RenderScheduler::reset(const BufferParams &buffer_params)
   state_.last_rebalance_changed = false;
   state_.need_rebalance_at_next_work = false;
 
-
   state_.last_work_tile_was_denoised = false;
   state_.tile_result_was_written = false;
   state_.postprocess_work_scheduled = false;
