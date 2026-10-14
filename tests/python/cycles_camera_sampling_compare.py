@@ -93,11 +93,12 @@ def worker(args):
     elapsed = time.perf_counter() - start
     # Read saved EXR as scene-linear float pixels, not a display-transformed PNG.
     image = bpy.data.images.load(str(args.exr), check_existing=False)
-    if image.channels != 4:
-        raise RuntimeError(f"Expected RGBA EXR, got {image.channels} channels")
-    rgba = array("f", [0.0]) * (image.size[0] * image.size[1] * 4)
-    image.pixels.foreach_get(rgba)
-    rgb = array("f", (rgba[i] for i in range(0, len(rgba)) if i % 4 != 3))
+    if image.channels not in (3, 4):
+        raise RuntimeError(f"Expected RGB(A) EXR, got {image.channels} channels")
+    channels = image.channels
+    values = array("f", [0.0]) * (image.size[0] * image.size[1] * channels)
+    image.pixels.foreach_get(values)
+    rgb = values if channels == 3 else array("f", (v for i, v in enumerate(values) if i % 4 != 3))
     if sys.byteorder != "little":
         rgb.byteswap()
     with args.raw.open("wb") as file:
