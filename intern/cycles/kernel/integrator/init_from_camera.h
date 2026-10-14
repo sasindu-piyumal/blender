@@ -35,14 +35,16 @@ ccl_device_inline Spectrum integrate_camera_sample(KernelGlobals kg,
                                     path_rng_3D(kg, rng_pixel, sample, PRNG_LENS_TIME) :
                                     zero_float3();
 
-  /* Keep x for time and y,z for lens when motion blur is enabled: this pairing has
-   * empirically given better convergence with both motion blur and depth of field.
-   * Without motion blur, time is fixed by camera_sample(), so use the better-stratified
-   * x,y projection for the lens (including custom cameras). Both projections of the
-   * same 3D sample preserve uniform lens inputs and deterministic sampling. */
+  /* We use x for time and y,z for lens because in practice with Sobol
+   * sampling this seems to give better convergence when an object is
+   * both motion blurred and out of focus, without significantly harming
+   * convergence for focal blur alone.  This is a little surprising,
+   * because one would expect using x,y for lens (the 2d part) would be
+   * best, since x,y are the best stratified.  Since it's not entirely
+   * clear why this is, this is probably worth revisiting at some point
+   * to investigate further. */
   const float rand_time = rand_time_lens.x;
-  const float2 rand_lens = use_motionblur ? make_float2(rand_time_lens.y, rand_time_lens.z) :
-                                          make_float2(rand_time_lens.x, rand_time_lens.y);
+  const float2 rand_lens = make_float2(rand_time_lens.y, rand_time_lens.z);
 
   /* Generate camera ray. */
   return camera_sample(kg, x, y, rand_filter, rand_time, rand_lens, ray);
