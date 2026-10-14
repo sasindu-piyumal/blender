@@ -53,6 +53,8 @@ def worker(args):
     if scene.camera is None:
         raise RuntimeError(f"No active camera in {args.scene}")
     scene.render.engine = "CYCLES"
+    bpy.context.preferences.experimental.use_cycles_debug = True
+    bpy.context.preferences.view.show_developer_ui = True
     scene.cycles.device = "CPU"
     scene.cycles.sampling_pattern = args.pattern
     scene.cycles.scrambling_distance = 1.0
