@@ -124,6 +124,7 @@ class CameraSamplingCompareTest(unittest.TestCase):
                     output.with_suffix(extension).write_bytes(b"not empty")
                 output.with_suffix(".json").write_text(json.dumps({
                     "pattern": "TABULATED_SOBOL", "samples": 1, "seed": 1,
+                    "scene": str(Path("scene.blend").resolve()), "case": "dof",
                     "device": "CPU", "dof": True, "motion_blur": False,
                 }))
             with mock.patch.object(comparator.subprocess, "run", side_effect=wrong_run):
