@@ -172,6 +172,8 @@ def main():
     for binary in (args.baseline, args.candidate):
         if not binary.is_file():
             parser.error(f"Missing Blender build: {binary}")
+    if args.baseline.resolve() == args.candidate.resolve():
+        parser.error("Baseline and candidate must be distinct builds")
     for asset in CASES.values():
         if not (args.assets / asset).is_file():
             parser.error(f"Missing scene: {args.assets / asset}")
