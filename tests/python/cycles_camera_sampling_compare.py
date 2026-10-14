@@ -139,7 +139,8 @@ def render(binary, scene, case, pattern, samples, seed, resolution, output):
     if (list(size) != metadata.get("size") or size != (resolution, resolution) or
             not all(math.isfinite(v) for v in values)):
         raise ValueError(f"Invalid RGB buffer or size in {raw}")
-    if not isinstance(metadata.get("seconds"), (int, float)) or not math.isfinite(metadata["seconds"]) or metadata["seconds"] < 0:
+    seconds = metadata.get("seconds")
+    if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or seconds < 0:
         raise ValueError(f"Invalid render time in {meta_path}")
     return metadata
 
