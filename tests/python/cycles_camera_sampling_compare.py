@@ -95,8 +95,11 @@ def worker(args):
     image = bpy.data.images.load(str(args.exr), check_existing=False)
     if image.channels not in (3, 4):
         raise RuntimeError(f"Expected RGB(A) EXR, got {image.channels} channels")
-    channels = image.channels
-    values = array("f", [0.0]) * (image.size[0] * image.size[1] * channels)
+    pixel_count = image.size[0] * image.size[1]
+    channels = len(image.pixels) // pixel_count
+    if channels not in (3, 4) or len(image.pixels) != pixel_count * channels:
+        raise RuntimeError(f"Unexpected EXR pixel buffer length: {len(image.pixels)}")
+    values = array("f", [0.0]) * len(image.pixels)
     image.pixels.foreach_get(values)
     rgb = values if channels == 3 else array("f", (v for i, v in enumerate(values) if i % 4 != 3))
     if sys.byteorder != "little":
