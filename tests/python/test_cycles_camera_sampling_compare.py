@@ -76,7 +76,7 @@ class CameraSamplingCompareTest(unittest.TestCase):
                     self.assertTrue(args.raw.is_absolute())
                     self.assertTrue(args.meta.is_absolute())
                     observed.append((args.samples, args.seed, args.exr))
-                    args.exr.write_bytes(b"EXR fixture")
+                    args.exr.write_bytes(b"\x76\x2f\x31\x01EXR fixture")
                     with args.raw.open("wb") as file:
                         file.write(struct.pack("<II", args.resolution, args.resolution))
                         file.write(array("f", [float(args.samples)] * (args.resolution ** 2 * 3)).tobytes())
