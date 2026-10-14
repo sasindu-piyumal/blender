@@ -1215,6 +1215,15 @@ ccl_device bool volume_integrate_should_stop(const ccl_private VolumeIntegrateRe
 
 /* Perform Russian Roulette termination to avoid drawing too many samples for indirect scatter, but
  * only if both direct and indirect scatter positions are available, or if no scattering is needed.
+ *
+ * The continuation probability follows the same formulation used for surface and transparent path
+ * termination in `path_state_continuation_probability()`: Russian Roulette is skipped for the
+ * first `min_bounce` bounces, and afterwards the continuation probability is
+ * `min(sqrt(max_channel(throughput)), 1)`. The square root raises the continuation probability
+ * above the raw throughput magnitude, which reduces the variance introduced by rescaling
+ * throughput on survival compared to using throughput directly as the probability, and it removes
+ * the need for a separately hand-tuned magic cutoff constant while keeping the termination
+ * decision smooth (no discontinuous jump at a fixed threshold) and depth-aware.
  */
 ccl_device_inline bool volume_russian_roulette_termination(
     const IntegratorState state,
@@ -1226,8 +1235,17 @@ ccl_device_inline bool volume_russian_roulette_termination(
     return true;
   }
 
-  const float thresh = reduce_max(fabs(result.indirect_throughput));
-  if (thresh > 0.05f) {
+  /* Do at least the configured minimum number of bounces before considering Russian Roulette,
+   * matching the guard `path_state_continuation_probability()` applies for surface and
+   * transparent paths. */
+  const int bounce = INTEGRATOR_STATE(state, path, bounce);
+  if (bounce <= kernel_data.integrator.min_bounce) {
+    return false;
+  }
+
+  const float continuation_probability = fminf(
+      sqrtf(reduce_max(fabs(result.indirect_throughput))), 1.0f);
+  if (continuation_probability >= 1.0f) {
     /* Only stop if contribution is low enough. */
     return false;
   }
@@ -1242,7 +1260,7 @@ ccl_device_inline bool volume_russian_roulette_termination(
 
   /* Randomly stop indirect scatter. */
   if (absorption_only || has_scatter_samples) {
-    if (reservoir.rand > thresh) {
+    if (reservoir.rand > continuation_probability) {
       result.indirect_throughput = zero_spectrum();
       if (equiangular || (vstate.direct_sample_method == VOLUME_SAMPLE_DISTANCE)) {
         /* Direct throughput depends on the indirect throughput, set to 0 for early termination. */
@@ -1251,20 +1269,21 @@ ccl_device_inline bool volume_russian_roulette_termination(
       return true;
     }
 
-    reservoir.rand = saturatef(reservoir.rand / thresh);
-    result.indirect_throughput /= thresh;
+    reservoir.rand = saturatef(reservoir.rand / continuation_probability);
+    result.indirect_throughput /= continuation_probability;
   }
 
   /* Randomly stop direct scatter. */
   if (equiangular) {
-    if (reservoir.rand > thresh) {
+    if (reservoir.rand > continuation_probability) {
       result.direct_scatter = true;
       result.direct_throughput = zero_spectrum();
-      reservoir.rand = (reservoir.rand - thresh) / (1.0f - thresh);
+      reservoir.rand = (reservoir.rand - continuation_probability) /
+                       (1.0f - continuation_probability);
     }
     else {
-      reservoir.rand /= thresh;
-      vstate.direct_rr_scale /= thresh;
+      reservoir.rand /= continuation_probability;
+      vstate.direct_rr_scale /= continuation_probability;
     }
     reservoir.rand = saturatef(reservoir.rand);
   }
