@@ -110,12 +110,7 @@ class CameraSamplingCompareTest(unittest.TestCase):
             root = Path(directory)
             for channels, values in ((3, [1.0, 2.0, 3.0]),
                                      (4, [1.0, 2.0, 3.0, 0.5])):
-                image = SimpleNamespace(
-                    channels=channels, size=(1, 1),
-                    pixels=SimpleNamespace(
-                        __len__=lambda: len(values),
-                        foreach_get=lambda target: target.__setitem__(slice(None), array("f", values))))
-                # Blender's pixel collection implements __len__ on its type, not on an instance.
+                # Blender's pixel collection implements __len__ on its type.
                 class PixelBuffer:
                     def __len__(self):
                         return len(values)
