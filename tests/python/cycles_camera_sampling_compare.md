@@ -26,7 +26,8 @@ python3 tests/python/cycles_camera_sampling_compare.py \
 ```
 
 `python3 tests/python/cycles_camera_sampling_compare.py --help` lists optional
-sample counts, independent seeds and resolution. Defaults: 1/16/64 SPP,
+sample counts, independent seeds and resolution. The stdlib-only metrics smoke
+check is `python3 -m unittest discover -s tests/python -p test_cycles_camera_sampling_compare.py`. Defaults: 1/16/64 SPP,
 seeds 1-4, 4096-SPP reference seed 123456, 96x96, CPU. Each Blender worker
 opens the scene, forces Cycles, explicit sampling pattern, seed, 32-bit float
 EXR, no adaptive sampling, no denoising/compositing, and writes timing and
