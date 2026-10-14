@@ -91,7 +91,7 @@ class CameraSamplingCompareTest(unittest.TestCase):
 
             argv = ["script.py", "--baseline", str(baseline), "--candidate", str(candidate),
                     "--assets", str(assets), "--output", "relative-results", "--samples", "1",
-                    "--seeds", "2", "--reference-samples", "4"]
+                    "--seeds", "2", "--reference-samples", "4", "--resolution", "2"]
             with mock.patch.dict(comparator.CASES, {"dof": "camera/camera_depth_of_field.blend"}, clear=True), \
                  mock.patch.object(comparator, "PATTERNS", ("SOBOL_BURLEY",)), \
                  mock.patch.object(comparator.subprocess, "run", side_effect=fake_blender), \
