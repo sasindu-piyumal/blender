@@ -77,12 +77,12 @@ class CameraSamplingCompareTest(unittest.TestCase):
                     observed.append((args.samples, args.seed, args.exr))
                     args.exr.write_bytes(b"EXR fixture")
                     with args.raw.open("wb") as file:
-                        file.write(struct.pack("<II", 1, 1))
-                        file.write(array("f", [float(args.samples)] * 3).tobytes())
+                        file.write(struct.pack("<II", args.resolution, args.resolution))
+                        file.write(array("f", [float(args.samples)] * (args.resolution ** 2 * 3)).tobytes())
                     args.meta.write_text(json.dumps({
                         "pattern": args.pattern, "samples": args.samples, "seed": args.seed,
                         "device": "CPU", "dof": True, "motion_blur": False,
-                        "size": [1, 1], "seconds": 0.25,
+                        "size": [args.resolution, args.resolution], "seconds": 0.25,
                     }))
                 with mock.patch.object(sys, "argv", command), mock.patch.object(comparator, "worker", fake_worker):
                     comparator.main()
