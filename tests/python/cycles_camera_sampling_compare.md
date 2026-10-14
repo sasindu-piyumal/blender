@@ -26,12 +26,16 @@ python3 tests/python/cycles_camera_sampling_compare.py \
 ```
 
 `python3 tests/python/cycles_camera_sampling_compare.py --help` lists optional
-sample counts, independent seeds and resolution. The stdlib-only metrics smoke
-check is `python3 -m unittest discover -s tests/python -p test_cycles_camera_sampling_compare.py`. Defaults: 1/16/64 SPP,
-seeds 1-4, 4096-SPP reference seed 123456, 96x96, CPU. Each Blender worker
-opens the scene, forces Cycles, explicit sampling pattern, seed, 32-bit float
-RGB(A) EXR (saved RGB pixel values), no adaptive sampling, no denoising/compositing, and writes timing and
-scene flags. Worker arguments are parsed after Blender's `--`; `--disable-autoexec`
+sample counts, independent seeds and resolution. The stdlib-only smoke test is:
+
+```sh
+python3 -m unittest discover -s tests/python -p test_cycles_camera_sampling_compare.py
+```
+
+Defaults: 1/16/64 SPP, seeds 1-4, 4096-SPP reference seed 123456, 96x96,
+CPU. Each Blender worker opens the scene, forces Cycles, explicit sampling
+pattern and seed, 32-bit float RGB(A) EXR (saved RGB pixel values), no adaptive
+sampling, no denoising/compositing, and writes timing and scene flags. Worker arguments are parsed after Blender's `--`; `--disable-autoexec`
 and `--python-exit-code 1` make scripted failures visible to the parent. The
 output directory is resolved to an absolute path before launching workers.
 Per-render logs, EXRs, linear RGB buffers and JSON metadata are retained in a
