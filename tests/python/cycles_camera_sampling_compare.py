@@ -134,8 +134,9 @@ def evaluate(reference, images):
     errors = [math.sqrt(sum((a - b) ** 2 for a, b in zip(img, ref)) / n)
               for img in data]
     # Variance across independent seeds, averaged across linear RGB pixels.
-    variance = sum(sum(v * v for v in img) - sum(img) ** 2 / len(img)
-                   for img in zip(*data)) / (n * len(data))
+    variance = sum(max(0.0, sum(v * v for v in img) / len(img) -
+                       (sum(img) / len(img)) ** 2)
+                   for img in zip(*data)) / n
     return {"rmse_by_seed": errors, "mean_rmse": statistics.mean(errors),
             "seed_variance": variance}
 
