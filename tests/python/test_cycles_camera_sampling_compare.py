@@ -156,8 +156,8 @@ class CameraSamplingCompareTest(unittest.TestCase):
             output.with_suffix(".log").unlink()
 
             def wrong_run(command, **kwargs):
-                for extension in (".exr", ".rgb"):
-                    output.with_suffix(extension).write_bytes(b"not empty")
+                output.with_suffix(".exr").write_bytes(b"\x76\x2f\x31\x01")
+                output.with_suffix(".rgb").write_bytes(b"not empty")
                 output.with_suffix(".json").write_text(json.dumps({
                     "pattern": "TABULATED_SOBOL", "samples": 1, "seed": 1,
                     "scene": str(Path("scene.blend").resolve()), "case": "dof",
