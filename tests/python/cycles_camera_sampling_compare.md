@@ -41,8 +41,8 @@ check. Use multiple seeds for a variance comparison.
 `mean_rmse` is the average per-seed linear RGB RMSE versus an *independent*
 high-SPP baseline image of the same scene/pattern; `seed_variance` is mean
 per-channel, per-pixel population variance across the selected independent
-seeds. `mean_render_seconds` measures the render call only (not startup,
-image loading, EXR I/O or build time). Evaluate per-case deltas across seeds,
+seeds. `mean_render_seconds` measures the render call (including EXR writing,
+but not process startup, image loading for analysis or build time). Evaluate per-case deltas across seeds,
 check reference noise with a higher reference SPP if effects are small, and
 repeat with other scenes/seeds before changing production. Low RMSE alone
 is not proof of unbiasedness; the same reference can favor the baseline, and
