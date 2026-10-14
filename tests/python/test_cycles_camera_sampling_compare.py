@@ -118,7 +118,7 @@ class CameraSamplingCompareTest(unittest.TestCase):
                     def foreach_get(self, target):
                         target[:] = array("f", values)
 
-                image.pixels = PixelBuffer()
+                image = SimpleNamespace(channels=channels, size=(1, 1), pixels=PixelBuffer())
                 dof = SimpleNamespace(use_dof=True, aperture_fstop=2.0)
                 scene = SimpleNamespace(
                     camera=SimpleNamespace(data=SimpleNamespace(dof=dof)),
