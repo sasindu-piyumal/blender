@@ -93,9 +93,9 @@ def worker(args):
     elapsed = time.perf_counter() - start
     # Read saved EXR as scene-linear float pixels, not a display-transformed PNG.
     image = bpy.data.images.load(str(args.exr), check_existing=False)
-    if image.channels not in (3, 4):
-        raise RuntimeError(f"Expected RGB(A) EXR, got {image.channels} channels")
     pixel_count = image.size[0] * image.size[1]
+    if pixel_count == 0:
+        raise RuntimeError("Empty EXR image")
     channels = len(image.pixels) // pixel_count
     if channels not in (3, 4) or len(image.pixels) != pixel_count * channels:
         raise RuntimeError(f"Unexpected EXR pixel buffer length: {len(image.pixels)}")
