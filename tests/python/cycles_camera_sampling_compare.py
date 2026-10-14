@@ -179,7 +179,10 @@ def main():
     parser.add_argument("--exr", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--raw", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--meta", type=Path, help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    # Blender passes its own command line in sys.argv; only arguments after --
+    # belong to this script. Normal Python invocations have no separator.
+    argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+    args = parser.parse_args(argv)
     if args.worker:
         worker(args)
         return
