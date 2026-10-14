@@ -11,6 +11,7 @@ import os
 import struct
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
