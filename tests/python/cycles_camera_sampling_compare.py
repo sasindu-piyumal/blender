@@ -200,6 +200,7 @@ def main():
     for asset in CASES.values():
         if not (args.assets / asset).is_file():
             parser.error(f"Missing scene: {args.assets / asset}")
+    args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     results = {}
     try:
