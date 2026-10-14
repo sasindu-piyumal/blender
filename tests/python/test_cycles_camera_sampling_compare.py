@@ -105,6 +105,46 @@ class CameraSamplingCompareTest(unittest.TestCase):
             self.assertEqual(len(observed), 3)  # reference, baseline, candidate
             self.assertTrue((root / "relative-results" / "summary.json").is_file())
 
+    def test_worker_rgb_buffer_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for channels, values in ((3, [1.0, 2.0, 3.0]),
+                                     (4, [1.0, 2.0, 3.0, 0.5])):
+                image = SimpleNamespace(
+                    channels=channels, size=(1, 1),
+                    pixels=SimpleNamespace(
+                        __len__=lambda: len(values),
+                        foreach_get=lambda target: target.__setitem__(slice(None), array("f", values))))
+                # Blender's pixel collection implements __len__ on its type, not on an instance.
+                class PixelBuffer:
+                    def __len__(self):
+                        return len(values)
+
+                    def foreach_get(self, target):
+                        target[:] = array("f", values)
+
+                image.pixels = PixelBuffer()
+                dof = SimpleNamespace(use_dof=True, aperture_fstop=2.0)
+                scene = SimpleNamespace(
+                    camera=SimpleNamespace(data=SimpleNamespace(dof=dof)),
+                    render=SimpleNamespace(use_motion_blur=False, image_settings=SimpleNamespace()),
+                    cycles=SimpleNamespace(),
+                    view_layers=[SimpleNamespace(cycles=SimpleNamespace(), samples=0)])
+                bpy = SimpleNamespace(
+                    ops=SimpleNamespace(wm=SimpleNamespace(open_mainfile=lambda **kw: None),
+                                        render=SimpleNamespace(render=lambda **kw: None)),
+                    context=SimpleNamespace(scene=scene, preferences=SimpleNamespace(
+                        experimental=SimpleNamespace(), view=SimpleNamespace())),
+                    data=SimpleNamespace(images=SimpleNamespace(load=lambda *a, **kw: image)))
+                args = SimpleNamespace(scene=root / "scene.blend", case="dof", pattern="SOBOL_BURLEY",
+                                       samples=1, seed=1, resolution=1, exr=root / "run.exr",
+                                       raw=root / "run.rgb", meta=root / "run.json")
+                with mock.patch.dict(sys.modules, {"bpy": bpy}):
+                    comparator.worker(args)
+                size, rgb = comparator.pixels(args.raw)
+                self.assertEqual(size, (1, 1))
+                self.assertEqual(list(rgb), [1.0, 2.0, 3.0])
+
     def test_reject_stale_and_missing_artifacts(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "run"
