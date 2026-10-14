@@ -106,6 +106,7 @@ def worker(args):
     args.meta.write_text(json.dumps({
         "seconds": elapsed, "size": list(image.size), "pattern": scene.cycles.sampling_pattern,
         "samples": scene.cycles.samples, "seed": scene.cycles.seed,
+        "scene": str(args.scene.resolve()), "case": args.case,
         "dof": dof.use_dof, "motion_blur": scene.render.use_motion_blur,
         "device": scene.cycles.device,
     }, indent=2))
