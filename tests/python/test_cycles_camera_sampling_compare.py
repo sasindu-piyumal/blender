@@ -116,6 +116,19 @@ class CameraSamplingCompareTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "did not produce"):
                     comparator.render(Path("blender"), Path("scene.blend"), "dof", "SOBOL_BURLEY",
                                       1, 1, 32, output)
+            output.with_suffix(".log").unlink()
+
+            def wrong_run(command, **kwargs):
+                for extension in (".exr", ".rgb"):
+                    output.with_suffix(extension).write_bytes(b"not empty")
+                output.with_suffix(".json").write_text(json.dumps({
+                    "pattern": "TABULATED_SOBOL", "samples": 1, "seed": 1,
+                    "device": "CPU", "dof": True, "motion_blur": False,
+                }))
+            with mock.patch.object(comparator.subprocess, "run", side_effect=wrong_run):
+                with self.assertRaisesRegex(ValueError, "Unexpected pattern"):
+                    comparator.render(Path("blender"), Path("scene.blend"), "dof", "SOBOL_BURLEY",
+                                      1, 1, 32, output)
 
 
 if __name__ == "__main__":
