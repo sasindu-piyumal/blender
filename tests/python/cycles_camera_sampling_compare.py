@@ -112,14 +112,33 @@ def worker(args):
 
 
 def render(binary, scene, case, pattern, samples, seed, resolution, output):
-    args = [str(binary), "-b", "--factory-startup", "--python", str(Path(__file__).resolve()),
+    output = output.resolve()
+    exr, raw, meta_path = (output.with_suffix(ext) for ext in (".exr", ".rgb", ".json"))
+    for path in (exr, raw, meta_path, output.with_suffix(".log")):
+        if path.exists():
+            raise FileExistsError(f"Refusing stale render artifact: {path}")
+    args = [str(binary), "-b", "--factory-startup", "--disable-autoexec",
+            "--python-exit-code", "1", "--python", str(Path(__file__).resolve()),
             "--", "--worker", "--scene", str(scene), "--case", case, "--pattern", pattern,
             "--samples", str(samples), "--seed", str(seed), "--resolution", str(resolution),
-            "--exr", str(output.with_suffix(".exr")), "--raw", str(output.with_suffix(".rgb")),
-            "--meta", str(output.with_suffix(".json"))]
+            "--exr", str(exr), "--raw", str(raw), "--meta", str(meta_path)]
     with output.with_suffix(".log").open("w") as log:
         subprocess.run(args, check=True, stdout=log, stderr=subprocess.STDOUT)
-    return json.loads(output.with_suffix(".json").read_text())
+    for path in (exr, raw, meta_path):
+        if not path.is_file() or path.stat().st_size == 0:
+            raise RuntimeError(f"Render did not produce {path}; inspect {output.with_suffix('.log')}")
+    metadata = json.loads(meta_path.read_text())
+    expected = {"pattern": pattern, "samples": samples, "seed": seed, "device": "CPU",
+                "dof": case != "motion", "motion_blur": case != "dof"}
+    for key, value in expected.items():
+        if metadata.get(key) != value:
+            raise ValueError(f"Unexpected {key} in {meta_path}: {metadata.get(key)!r}, expected {value!r}")
+    size, values = pixels(raw)
+    if list(size) != metadata.get("size") or not all(math.isfinite(v) for v in values):
+        raise ValueError(f"Invalid RGB buffer or size in {raw}")
+    if not isinstance(metadata.get("seconds"), (int, float)) or not math.isfinite(metadata["seconds"]) or metadata["seconds"] < 0:
+        raise ValueError(f"Invalid render time in {meta_path}")
+    return metadata
 
 
 def evaluate(reference, images):
