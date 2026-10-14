@@ -132,6 +132,9 @@ def render(binary, scene, case, pattern, samples, seed, resolution, output):
     for path in (exr, raw, meta_path):
         if not path.is_file() or path.stat().st_size == 0:
             raise RuntimeError(f"Render did not produce {path}; inspect {output.with_suffix('.log')}")
+    with exr.open("rb") as file:
+        if file.read(4) != b"\x76\x2f\x31\x01":
+            raise ValueError(f"Invalid OpenEXR header in {exr}")
     metadata = json.loads(meta_path.read_text())
     expected = {"pattern": pattern, "samples": samples, "seed": seed, "device": "CPU",
                 "scene": str(scene.resolve()), "case": case,
