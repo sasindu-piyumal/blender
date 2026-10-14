@@ -6,10 +6,15 @@
 
 from array import array
 from pathlib import Path
+import json
+import os
 import struct
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
+import cycles_camera_sampling_compare as comparator
 from cycles_camera_sampling_compare import evaluate
 
 
