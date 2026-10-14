@@ -130,6 +130,7 @@ def render(binary, scene, case, pattern, samples, seed, resolution, output):
             raise RuntimeError(f"Render did not produce {path}; inspect {output.with_suffix('.log')}")
     metadata = json.loads(meta_path.read_text())
     expected = {"pattern": pattern, "samples": samples, "seed": seed, "device": "CPU",
+                "scene": str(scene.resolve()), "case": case,
                 "dof": case != "motion", "motion_blur": case != "dof"}
     for key, value in expected.items():
         if metadata.get(key) != value:
