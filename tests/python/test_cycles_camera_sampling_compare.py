@@ -81,7 +81,8 @@ class CameraSamplingCompareTest(unittest.TestCase):
                         file.write(array("f", [float(args.samples)] * (args.resolution ** 2 * 3)).tobytes())
                     args.meta.write_text(json.dumps({
                         "pattern": args.pattern, "samples": args.samples, "seed": args.seed,
-                        "device": "CPU", "dof": True, "motion_blur": False,
+                        "device": "CPU", "scene": str(args.scene.resolve()), "case": args.case,
+                        "dof": True, "motion_blur": False,
                         "size": [args.resolution, args.resolution], "seconds": 0.25,
                     }))
                 with mock.patch.object(sys, "argv", command), mock.patch.object(comparator, "worker", fake_worker):
