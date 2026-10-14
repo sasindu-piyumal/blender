@@ -31,9 +31,13 @@ check is `python3 -m unittest discover -s tests/python -p test_cycles_camera_sam
 seeds 1-4, 4096-SPP reference seed 123456, 96x96, CPU. Each Blender worker
 opens the scene, forces Cycles, explicit sampling pattern, seed, 32-bit float
 EXR, no adaptive sampling, no denoising/compositing, and writes timing and
-scene flags. Per-render logs, EXRs, linear RGB buffers and JSON metadata are
-retained in a new output directory; a completed run writes `summary.json`.
-Runs abort on missing assets, unsupported pattern or disabled effects. Expect
+scene flags. Worker arguments are parsed after Blender's `--`; `--disable-autoexec`
+and `--python-exit-code 1` make scripted failures visible to the parent. The
+output directory is resolved to an absolute path before launching workers.
+Per-render logs, EXRs, linear RGB buffers and JSON metadata are retained in a
+new output directory; a completed run writes `summary.json`. Runs abort on
+stale or missing artifacts, mismatched requested pattern/seed/samples/effects,
+invalid RGB buffers, missing assets, unsupported pattern or disabled effects. Expect
 many renders (three scenes x two patterns x two variants x four seeds x three
 sample counts, plus six references); reduce `--seeds`/`--samples` for a smoke
 check. Use multiple seeds for a variance comparison.
